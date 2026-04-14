@@ -1,5 +1,5 @@
 //
-//  StickyBottomSheetViewController.swift
+//  InstagramCommentSheetViewController.swift
 //  CustomUI
 //
 //  Created by 김정원 on 4/8/26.
@@ -7,7 +7,7 @@
 
 import UIKit
 
-class StickyBottomSheetViewController: UIViewController {
+class InstagramCommentSheetViewController: UIViewController {
     
     enum SheetState {
         case expanded
@@ -172,7 +172,7 @@ class StickyBottomSheetViewController: UIViewController {
     }
 }
 
-extension StickyBottomSheetViewController: UITableViewDataSource, CommentViewDelegate {
+extension InstagramCommentSheetViewController: UITableViewDataSource, CommentViewDelegate {
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         return commentData.count
     }
