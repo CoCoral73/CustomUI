@@ -7,7 +7,7 @@
 
 import UIKit
 
-class InstagramCommentSheetViewController: UIViewController {
+class InstagramCommentSheetViewController: UIViewController, UIGestureRecognizerDelegate {
     
     enum SheetState {
         case expanded
@@ -23,7 +23,8 @@ class InstagramCommentSheetViewController: UIViewController {
     @IBOutlet weak var commentView: CommentView!
     
     var currentState: SheetState = .folded
-    var preConstant: CGFloat = 0
+    var preOffset: CGFloat = 0
+    var isPanGesture: Bool? = nil
     var expandedConstant: CGFloat = 59
     var partialConstant: CGFloat { view.frame.height * 0.35 }
     var foldedConstant: CGFloat { view.frame.height }
@@ -52,6 +53,7 @@ class InstagramCommentSheetViewController: UIViewController {
         grabber.layer.cornerRadius = 1
         
         tableView.dataSource = self
+        tableView.delegate = self
         tableView.rowHeight = UITableView.automaticDimension
         
         commentView.delegate = self
@@ -89,44 +91,41 @@ class InstagramCommentSheetViewController: UIViewController {
         let yTranslation = translation.y
         
         switch gesture.state {
-        case .began:
-            preConstant = sheetTopConstraint.constant
         case .changed:
             updateSheetTopConstraint(with: yTranslation)
         case .ended:
-            let yLocation = gesture.location(in: view).y
-            snapToNearestState(velocity: gesture.velocity(in: view).y, location: yLocation)
+            snapToNearestState(velocity: gesture.velocity(in: view).y, translation: yTranslation)
         default:
             break
         }
     }
     
     func updateSheetTopConstraint(with y: CGFloat) {
-        let targetConstant = preConstant + y
+        let targetConstant = targetStateValue(state: currentState) + y
         if targetConstant >= 20 && targetConstant <= foldedConstant - 20 {
-            sheetTopConstraint.constant = preConstant + y
+            sheetTopConstraint.constant = targetStateValue(state: currentState) + y
         }
         
         let progress = min((self.foldedConstant - targetConstant) / (self.foldedConstant - self.partialConstant), 1)
         dimmedView.alpha = progress * 0.5
     }
     
-    func snapToNearestState(velocity: CGFloat, location: CGFloat) {
+    func snapToNearestState(velocity: CGFloat, translation: CGFloat) {
         let currentConstant = sheetTopConstraint.constant
         let targetState: SheetState
         
         if abs(velocity) > 1000 {
             if velocity < 0 {
-                if location >= partialConstant {
+                if currentConstant >= partialConstant {
                     targetState = .partial
                 } else {
                     targetState = .expanded
                 }
             } else {
-                if location >= partialConstant {
-                    targetState = .folded
-                } else {
+                if currentState == .expanded && abs(translation) <= partialConstant - expandedConstant {
                     targetState = .partial
+                } else {
+                    targetState = .folded
                 }
             }
         } else {
@@ -170,9 +169,14 @@ class InstagramCommentSheetViewController: UIViewController {
             self.dimmedView.alpha = progress * 0.5
         }, completion: nil)
     }
+    
+    // 두 제스처 동시 인식 허용
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return true
+    }
 }
 
-extension InstagramCommentSheetViewController: UITableViewDataSource, CommentViewDelegate {
+extension InstagramCommentSheetViewController: UITableViewDataSource, UITableViewDelegate, CommentViewDelegate {
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         return commentData.count
     }
@@ -195,5 +199,49 @@ extension InstagramCommentSheetViewController: UITableViewDataSource, CommentVie
     func commentViewDidBeginEditing(_ view: CommentView) {
         currentState = .expanded
         animateSheet(to: targetStateValue(state: currentState))
+    }
+    
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        preOffset = scrollView.contentOffset.y
+    }
+    
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        let velocity = scrollView.panGestureRecognizer.velocity(in: scrollView).y
+        let translation = scrollView.panGestureRecognizer.translation(in: scrollView).y
+        
+        if isPanGesture == nil {
+            if preOffset > 0 || velocity <= 0 {
+                isPanGesture = false
+            } else {
+                view.endEditing(true)
+                isPanGesture = true
+            }
+        }
+        
+        if isPanGesture == true {
+            scrollView.contentOffset.y = 0
+            updateSheetTopConstraint(with: translation)
+        }
+    }
+    
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        let velocity = scrollView.panGestureRecognizer.velocity(in: scrollView).y
+        let translation = scrollView.panGestureRecognizer.translation(in: scrollView).y
+        
+        if velocity > 0 {
+            view.endEditing(true)
+        }
+        
+        if isPanGesture == true {
+            snapToNearestState(velocity: velocity, translation: translation)
+        }
+        
+        if !decelerate {
+            isPanGesture = nil
+        }
+    }
+    
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        isPanGesture = nil
     }
 }
